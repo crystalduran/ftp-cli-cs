@@ -1,4 +1,5 @@
 ﻿using FluentFTP;
+using FluentFTP.Exceptions;
 
 Console.WriteLine("=== FTP CLI Tool for Learning ===");
 
@@ -22,6 +23,7 @@ static string ReadPassword()
 
     do
     {
+
         var keyInfo = Console.ReadKey(intercept: true);
         key = keyInfo.Key;
 
@@ -43,10 +45,10 @@ static string ReadPassword()
 }
 
 
-static void ListFiles(FtpClient client)
+static async Task ListFiles(AsyncFtpClient client)
 {
     Console.WriteLine("\nListing files and folders...");
-    foreach (var item in client.GetListing("/"))
+    foreach (var item in await client.GetListing("/"))
     {
         Console.WriteLine($"{item.Type}: {item.FullName}");
     }
@@ -80,4 +82,58 @@ static async Task UploadFile(AsyncFtpClient client)
             break;
     }
 }
+
+static async Task DownloadFile(AsyncFtpClient client)
+{
+    Console.Write("Enter the remote file path: ");
+    string? remotePath = Console.ReadLine();
+
+    Console.Write("Enter local destination path: ");
+    string? localPath = Console.ReadLine();
+
+    if(await client.DownloadFile(localPath, remotePath) == FtpStatus.Success)
+    {
+        Console.WriteLine("File downloaded successfully!");
+    }
+    else
+    {
+        Console.WriteLine("File download failed!");
+    }
+}
+
+static async Task CreateFolder(AsyncFtpClient client)
+{
+    Console.Write("Enter new folder name: ");
+    string? folderName = Console.ReadLine();
+    if (await client.CreateDirectory(folderName))
+    {
+        Console.WriteLine("Folder created successfully!");
+    }
+    else
+    {
+        Console.WriteLine("Failed to create folder!");
+    }
+}
+
+static async Task DeleteFile(AsyncFtpClient client)
+{
+    Console.Write("Enter the remote file path to delete: ");
+    string? remotePath = Console.ReadLine();
+
+    try
+    {
+        await client.DeleteFile(remotePath);
+        Console.WriteLine("File deleted successfully!");
+    }
+    catch (FtpCommandException ex)
+    {
+        Console.WriteLine($"Failed to delete file: {ex.Message}");
+    }
+    catch(Exception ex)
+    {
+        Console.WriteLine($"Unexpected error occurred: {ex.Message}");
+    }
+}
+
+
 
