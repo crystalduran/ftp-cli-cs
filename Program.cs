@@ -13,6 +13,82 @@ string? user = Console.ReadLine();
 Console.Write("Enter password: ");
 string pass = ReadPassword();
 
+// create ftp client
+
+Console.WriteLine("\nConnecting to FTP server...");
+var client = await ConnectAsync(host, user, pass);
+
+Console.WriteLine("\nAvailable commands: list, mkdir, upload, delete, download, exit");
+
+while (true)
+{
+    Console.Write("\nftp> ");
+    string? command = Console.ReadLine()?.Trim().ToLower();
+
+    if (string.IsNullOrWhiteSpace(command)) continue;
+
+    switch (command)
+    {
+        case "list":
+            await ListFiles(client);
+            break;
+        case "mkdir":
+            await CreateFolder(client);
+            break;
+        case "upload":
+            await UploadFile(client);
+            break;
+        case "delete":
+            await DeleteFile(client);
+            break;
+        case "download":
+            await DownloadFile(client);
+            break;
+        case "exit":
+            await client.Disconnect();
+            Console.WriteLine("Bye!");
+            return;
+        default:
+            Console.WriteLine("Unknown command. You can only use list, mkdir, upload, delete, download, exit. Try again.");
+            break;
+    }
+}
+
+
+static async Task<AsyncFtpClient> ConnectAsync(string? host, string? user, string? pass)
+{
+    var token = new CancellationToken();
+
+    var conn = new AsyncFtpClient()
+    {
+        Port = 21,
+        Host = host,
+        Credentials = new System.Net.NetworkCredential(user, pass)
+    };
+
+    try
+    {
+        await conn.Connect(token);
+        Console.WriteLine("Connected successfully!");
+    }
+    catch (FtpCommandException ex)
+    {
+        Console.WriteLine($"FTP command error: {ex.Message}");
+    }
+    catch (FtpException ex)
+    {
+        Console.WriteLine($"FTP error: {ex.Message}");
+        throw;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Unexpected error: {ex.Message}");
+        throw;
+    }
+
+    return conn;
+}
+
 
 // === COMMAND FUNCTIONS ===
 
@@ -48,9 +124,23 @@ static string ReadPassword()
 static async Task ListFiles(AsyncFtpClient client)
 {
     Console.WriteLine("\nListing files and folders...");
-    foreach (var item in await client.GetListing("/"))
+    string path = "."; // root virtual del usuario
+
+    try
     {
-        Console.WriteLine($"{item.Type}: {item.FullName}");
+        var listing = await client.GetListing(path);
+        foreach (var item in listing)
+        {
+            Console.WriteLine($"{item.Type}: {item.FullName}");
+        }
+    }
+    catch (FtpCommandException ex) when (ex.CompletionCode == "501")
+    {
+        Console.WriteLine($"Directory '{path}' does not exist.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Unexpected error: {ex.Message}");
     }
 }
 
@@ -69,10 +159,10 @@ static async Task UploadFile(AsyncFtpClient client)
 
     FtpStatus status = await client.UploadFile(localPath, remotePath);
 
-    switch(status)
+    switch (status)
     {
         case FtpStatus.Failed:
-                    Console.WriteLine("File upload failed!");
+            Console.WriteLine("File upload failed!");
             break;
         case FtpStatus.Success:
             Console.WriteLine("File uploaded successfully!");
@@ -91,13 +181,26 @@ static async Task DownloadFile(AsyncFtpClient client)
     Console.Write("Enter local destination path: ");
     string? localPath = Console.ReadLine();
 
-    if(await client.DownloadFile(localPath, remotePath) == FtpStatus.Success)
+    try
     {
-        Console.WriteLine("File downloaded successfully!");
+        FtpStatus status = await client.DownloadFile(localPath, remotePath);
+
+        if (status == FtpStatus.Success)
+        {
+            Console.WriteLine("File downloaded successfully!");
+        }
+        else
+        {
+            Console.WriteLine("File download failed!");
+        }
     }
-    else
+    catch (FtpCommandException ex)
     {
-        Console.WriteLine("File download failed!");
+        Console.WriteLine($"Failed to download file: {ex.Message}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Unexpected error occurred: {ex.Message}");
     }
 }
 
@@ -129,7 +232,7 @@ static async Task DeleteFile(AsyncFtpClient client)
     {
         Console.WriteLine($"Failed to delete file: {ex.Message}");
     }
-    catch(Exception ex)
+    catch (Exception ex)
     {
         Console.WriteLine($"Unexpected error occurred: {ex.Message}");
     }
